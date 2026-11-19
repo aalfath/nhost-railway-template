@@ -29,9 +29,12 @@ export HASURA_GRAPHQL_STRINGIFY_NUMERIC_TYPES="${HASURA_GRAPHQL_STRINGIFY_NUMERI
 export HASURA_GRAPHQL_LIVE_QUERIES_MULTIPLEXED_REFETCH_INTERVAL="${HASURA_GRAPHQL_LIVE_QUERIES_MULTIPLEXED_REFETCH_INTERVAL:-1000}"
 export HASURA_GRAPHQL_GRACEFUL_SHUTDOWN_TIMEOUT="${HASURA_GRAPHQL_GRACEFUL_SHUTDOWN_TIMEOUT:-25}"
 
+# Never hang on a half-open connection (for example while Postgres restarts).
+export PGCONNECT_TIMEOUT="${PGCONNECT_TIMEOUT:-5}"
+
 echo "nhost-graphql: waiting for Postgres"
 i=0
-until psql "$HASURA_GRAPHQL_DATABASE_URL" -qAtc 'select 1' >/dev/null 2>&1; do
+until timeout 10 psql "$HASURA_GRAPHQL_DATABASE_URL" -qAtc 'select 1' >/dev/null 2>&1; do
   i=$((i + 1))
   if [ "$i" -ge 150 ]; then
     echo "nhost-graphql: Postgres not reachable after 5 minutes" >&2
@@ -41,7 +44,7 @@ until psql "$HASURA_GRAPHQL_DATABASE_URL" -qAtc 'select 1' >/dev/null 2>&1; do
 done
 
 echo "nhost-graphql: preparing auth/storage schemas and extensions"
-psql "$HASURA_GRAPHQL_DATABASE_URL" -v ON_ERROR_STOP=1 -q -f /nhost/init.sql
+timeout 120 psql "$HASURA_GRAPHQL_DATABASE_URL" -v ON_ERROR_STOP=1 -q -f /nhost/init.sql
 
 echo "nhost-graphql: starting Hasura on port $HASURA_GRAPHQL_SERVER_PORT"
 exec graphql-engine serve

@@ -1,0 +1,47 @@
+#!/bin/sh
+# Hasura for Nhost on Railway: wait for Postgres, create the schemas and
+# extensions Nhost Auth and Storage expect, then start Hasura on $PORT.
+set -eu
+
+: "${HASURA_GRAPHQL_DATABASE_URL:?HASURA_GRAPHQL_DATABASE_URL must be set}"
+: "${HASURA_GRAPHQL_ADMIN_SECRET:?HASURA_GRAPHQL_ADMIN_SECRET must be set}"
+: "${HASURA_GRAPHQL_JWT_SECRET:?HASURA_GRAPHQL_JWT_SECRET must be set}"
+
+export HASURA_GRAPHQL_SERVER_PORT="${PORT:-8080}"
+export HASURA_GRAPHQL_SERVER_HOST="${HASURA_GRAPHQL_SERVER_HOST:-*}"
+# Defaults from upstream examples/docker-compose (production values where they differ).
+export HASURA_GRAPHQL_ENABLE_CONSOLE="${HASURA_GRAPHQL_ENABLE_CONSOLE:-true}"
+export HASURA_GRAPHQL_CONSOLE_ASSETS_DIR="${HASURA_GRAPHQL_CONSOLE_ASSETS_DIR:-/srv/console-assets}"
+export HASURA_GRAPHQL_DEV_MODE="${HASURA_GRAPHQL_DEV_MODE:-false}"
+export HASURA_GRAPHQL_ADMIN_INTERNAL_ERRORS="${HASURA_GRAPHQL_ADMIN_INTERNAL_ERRORS:-true}"
+export HASURA_GRAPHQL_ENABLE_TELEMETRY="${HASURA_GRAPHQL_ENABLE_TELEMETRY:-false}"
+export HASURA_GRAPHQL_UNAUTHORIZED_ROLE="${HASURA_GRAPHQL_UNAUTHORIZED_ROLE:-public}"
+export HASURA_GRAPHQL_CORS_DOMAIN="${HASURA_GRAPHQL_CORS_DOMAIN:-*}"
+export HASURA_GRAPHQL_ENABLED_APIS="${HASURA_GRAPHQL_ENABLED_APIS:-metadata,graphql,pgdump,config}"
+export HASURA_GRAPHQL_ENABLED_LOG_TYPES="${HASURA_GRAPHQL_ENABLED_LOG_TYPES:-startup,http-log,webhook-log,websocket-log}"
+export HASURA_GRAPHQL_LOG_LEVEL="${HASURA_GRAPHQL_LOG_LEVEL:-warn}"
+export HASURA_GRAPHQL_PG_CONNECTIONS="${HASURA_GRAPHQL_PG_CONNECTIONS:-50}"
+export HASURA_GRAPHQL_PG_TIMEOUT="${HASURA_GRAPHQL_PG_TIMEOUT:-180}"
+export HASURA_GRAPHQL_TX_ISOLATION="${HASURA_GRAPHQL_TX_ISOLATION:-read-committed}"
+export HASURA_GRAPHQL_USE_PREPARED_STATEMENTS="${HASURA_GRAPHQL_USE_PREPARED_STATEMENTS:-true}"
+export HASURA_GRAPHQL_INFER_FUNCTION_PERMISSIONS="${HASURA_GRAPHQL_INFER_FUNCTION_PERMISSIONS:-true}"
+export HASURA_GRAPHQL_STRINGIFY_NUMERIC_TYPES="${HASURA_GRAPHQL_STRINGIFY_NUMERIC_TYPES:-false}"
+export HASURA_GRAPHQL_LIVE_QUERIES_MULTIPLEXED_REFETCH_INTERVAL="${HASURA_GRAPHQL_LIVE_QUERIES_MULTIPLEXED_REFETCH_INTERVAL:-1000}"
+export HASURA_GRAPHQL_GRACEFUL_SHUTDOWN_TIMEOUT="${HASURA_GRAPHQL_GRACEFUL_SHUTDOWN_TIMEOUT:-25}"
+
+echo "nhost-graphql: waiting for Postgres"
+i=0
+until psql "$HASURA_GRAPHQL_DATABASE_URL" -qAtc 'select 1' >/dev/null 2>&1; do
+  i=$((i + 1))
+  if [ "$i" -ge 150 ]; then
+    echo "nhost-graphql: Postgres not reachable after 5 minutes" >&2
+    exit 1
+  fi
+  sleep 2
+done
+
+echo "nhost-graphql: preparing auth/storage schemas and extensions"
+psql "$HASURA_GRAPHQL_DATABASE_URL" -v ON_ERROR_STOP=1 -q -f /nhost/init.sql
+
+echo "nhost-graphql: starting Hasura on port $HASURA_GRAPHQL_SERVER_PORT"
+exec graphql-engine serve

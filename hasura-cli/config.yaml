@@ -1,0 +1,4 @@
+version: 3
+# Kept on the Railway volume mounted at /app/data.
+metadata_directory: data/metadata
+migrations_directory: data/migrations

@@ -19,6 +19,8 @@ until curl -fsS -m 5 -o /dev/null "$HASURA_GRAPHQL_ENDPOINT/healthz"; do
 done
 
 echo "nhost-hasura-cli: starting migrations API on port ${PORT:-9693}"
+# hasura-cli binds the migrations API to the --api-host address, so 0.0.0.0
+# makes it reachable over the private network (upstream maps the host to 0.0.0.0).
 exec hasura-cli console \
   --no-browser \
   --skip-update-check \
@@ -26,5 +28,5 @@ exec hasura-cli console \
   --address 0.0.0.0 \
   --console-port 9695 \
   --api-port "${PORT:-9693}" \
-  --api-host http://127.0.0.1 \
+  --api-host http://0.0.0.0 \
   --console-hge-endpoint "$HASURA_GRAPHQL_ENDPOINT"
